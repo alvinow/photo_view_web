@@ -53,6 +53,10 @@ Widget build(BuildContext context) {
 }
 ```
 
+**Note on Instagram Zoom:**
+- **Mobile/Touchscreen**: Snaps back immediately when you release a pinch gesture
+- **Desktop (Mouse/Trackpad)**: Snaps back 500ms after you stop zooming with Ctrl+Scroll
+
 ### Gallery
 
 ```dart

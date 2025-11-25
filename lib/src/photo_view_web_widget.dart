@@ -32,6 +32,7 @@ class PhotoViewWeb extends StatefulWidget {
     this.onScaleEnd,
     this.filterQuality = FilterQuality.none,
     this.enableInstagramZoom = false,
+    this.enableDebug = false,
   });
 
   final ImageProvider imageProvider;
@@ -55,6 +56,7 @@ class PhotoViewWeb extends StatefulWidget {
   final PhotoViewImageScaleEndCallback? onScaleEnd;
   final FilterQuality filterQuality;
   final bool enableInstagramZoom;
+  final bool enableDebug;
 
   @override
   State<PhotoViewWeb> createState() => _PhotoViewWebState();
@@ -146,6 +148,7 @@ class _PhotoViewWebState extends State<PhotoViewWeb> with AutomaticKeepAliveClie
         enablePan: true,
         disableGestures: widget.disableGestures,
         enableInstagramZoom: widget.enableInstagramZoom,
+        enableDebug: widget.enableDebug,
         onScaleUpdate: ((double scale) {
           _controller.setScale(scale);
         }).toJS,

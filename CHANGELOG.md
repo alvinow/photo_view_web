@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - 2025-11-24
+## [0.1.0] - 2025-11-25
 
 ### Added
 - Initial release of photo_view_web
@@ -11,6 +11,8 @@
 - JavaScript interop layer for web gestures
 - Compatible API with original photo_view package
 - Example application demonstrating all features
+- **Instagram-style zoom**: Optional snap-back animation on pinch release (`enableInstagramZoom`)
+- **Debug mode**: Optional console logging for development (`enableDebug`)
 
 ### Features
 - Pinch to zoom (with min/max scale limits)
@@ -22,3 +24,5 @@
 - Custom loading and error builders
 - Scale state management
 - Programmatic control via controllers
+- Instagram-style zoom behavior (optional)
+- Debug logging mode for development

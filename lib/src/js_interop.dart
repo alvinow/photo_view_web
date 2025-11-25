@@ -43,5 +43,6 @@ extension type PhotoViewOptions._(JSObject _) implements JSObject {
     JSFunction? onTap,
     JSFunction? onDoubleTap,
     bool? enableInstagramZoom,
+    bool? enableDebug,
   });
 }
