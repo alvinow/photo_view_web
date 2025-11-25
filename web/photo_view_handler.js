@@ -18,11 +18,12 @@ class PhotoViewHandler {
     this.lastRotation = 0;
     this.lastPosX = 0;
     this.lastPosY = 0;
-    this.rotationThreshold = 5; // Minimum rotation in degrees to apply
+    this.rotationThreshold = 15; // Minimum rotation in degrees to START rotating (increased from 5)
     this.rotationEnabled = false; // Rotation only enabled after delay
     this.rotationDelayMs = 500; // Delay before rotation activates
-    this.maxRotationSpeed = 3; // Maximum degrees per frame
-    this.rotationDamping = 0.3; // Damping factor (0-1, lower = smoother)
+    this.maxRotationSpeed = 5; // Maximum degrees per frame (increased for responsiveness)
+    this.rotationDamping = 0.5; // Damping factor (0-1, higher = more responsive)
+    this.totalRotation = 0; // Track total rotation during gesture
 
     // Constraints
     this.minScale = this.options.minScale || 0.5;
@@ -131,7 +132,8 @@ class PhotoViewHandler {
 
     if (this.enableRotation) {
       this.hammer.on('rotatestart', (e) => {
-        // Start timer to enable rotation after delay
+        // Reset total rotation tracker
+        this.totalRotation = 0;
         this.rotationEnabled = false;
         if (this.rotationTimer) {
           clearTimeout(this.rotationTimer);
@@ -239,134 +241,172 @@ class PhotoViewHandler {
         console.log('Resetting zoom...');
       }
       this.reset(true);
-      this.rotationEnabled = false;
-      if (this.rotationTimer) {
-        clearTimeout(this.rotationTimer);
-      }
-    }
-
-    handlePan(event) {
-      if (!this.enablePan) return;
-
-      // Calculate new position
-      this.posX = this.lastPosX + event.deltaX;
-      this.posY = this.lastPosY + event.deltaY;
-
-      // Apply boundaries when not zoomed
-      if (this.scale <= 1.0) {
-        this.posX = 0;
-        this.posY = 0;
-      }
-
-      this.applyTransform();
-      this.onPanUpdate(this.posX, this.posY);
-    }
-
-    handlePanEnd(event) {
-      this.lastPosX = this.posX;
-      this.lastPosY = this.posY;
-    }
-
-    handleTap(event) {
-      const rect = this.container.getBoundingClientRect();
-      const x = event.center.x - rect.left;
-      const y = event.center.y - rect.top;
-      this.onTap(x, y);
-    }
-
-    handleDoubleTap(event) {
-      // Toggle between min and max scale
-      const targetScale = this.scale > 1.0 ? 1.0 : 2.0;
-      this.setScale(targetScale);
-      this.onDoubleTap(event.center.x, event.center.y);
-    }
-
-    applyTransform() {
-      if (!this.imageElement) return;
-
-      const transform = `translate(${this.posX}px, ${this.posY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
-      this.imageElement.style.transform = transform;
-      this.imageElement.style.webkitTransform = transform;
-    }
-
-    // Public API methods
-    setScale(scale, animated = true) {
-      this.scale = Math.max(this.minScale, Math.min(this.maxScale, scale));
-      this.lastScale = this.scale;
-
-      if (animated) {
-        this.imageElement.style.transition = 'transform 0.3s ease-out';
-        setTimeout(() => {
-          this.imageElement.style.transition = '';
-        }, 300);
-      }
-
-      this.applyTransform();
-      this.onScaleUpdate(this.scale);
-    }
-
-    setPosition(x, y, animated = true) {
-      this.posX = x;
-      this.posY = y;
-      this.lastPosX = x;
-      this.lastPosY = y;
-
-      if (animated) {
-        this.imageElement.style.transition = 'transform 0.3s ease-out';
-        setTimeout(() => {
-          this.imageElement.style.transition = '';
-        }, 300);
-      }
-
-      this.applyTransform();
-      this.onPanUpdate(this.posX, this.posY);
-    }
-
-    setRotation(rotation, animated = true) {
-      this.rotation = rotation;
-      this.lastRotation = rotation;
-
-      if (animated) {
-        this.imageElement.style.transition = 'transform 0.3s ease-out';
-        setTimeout(() => {
-          this.imageElement.style.transition = '';
-        }, 300);
-      }
-
-      this.applyTransform();
-      this.onRotateUpdate(this.rotation);
-    }
-
-    reset(animated = true) {
-      this.setScale(this.options.initialScale || 1.0, animated);
-      this.setPosition(0, 0, animated);
-      this.setRotation(0, animated);
-    }
-
-    updateImage(imageUrl) {
-      this.imageUrl = imageUrl;
-      if (this.imageElement) {
-        this.imageElement.src = imageUrl;
-      }
-    }
-
-    dispose() {
-      if (this.hammer) {
-        this.hammer.destroy();
-        this.hammer = null;
-      }
-      if (this.zoomResetTimeout) {
-        clearTimeout(this.zoomResetTimeout);
-      }
-      if (this.rotationTimer) {
-        clearTimeout(this.rotationTimer);
-      }
-      if (this.container && this.imageElement) {
-        this.container.removeChild(this.imageElement);
-      }
-      this.imageElement = null;
     }
   }
+
+  handleRotate(event) {
+    if (!this.enableRotation) return;
+    
+    // Track total rotation during this gesture
+    this.totalRotation = Math.abs(event.rotation);
+    
+    // Only apply rotation after delay AND if total rotation exceeds threshold
+    if (!this.rotationEnabled || this.totalRotation < this.rotationThreshold) {
+      if (this.enableDebug && this.totalRotation > 0) {
+        console.log('Rotation detected but below threshold:', this.totalRotation, '/', this.rotationThreshold);
+      }
+      return;
+    }
+    
+    // Calculate target rotation
+    const targetRotation = this.lastRotation + event.rotation;
+    
+    // Calculate rotation delta
+    let rotationDelta = targetRotation - this.rotation;
+    
+    // Limit rotation speed to prevent jumps
+    if (Math.abs(rotationDelta) > this.maxRotationSpeed) {
+      rotationDelta = Math.sign(rotationDelta) * this.maxRotationSpeed;
+    }
+    
+    // Apply damping for smooth rotation
+    this.rotation += rotationDelta * this.rotationDamping;
+    
+    this.applyTransform();
+    this.onRotateUpdate(this.rotation);
+  }
+
+  handleRotateEnd(event) {
+    this.lastRotation = this.rotation;
+    this.rotationEnabled = false;
+    this.totalRotation = 0;
+    if (this.rotationTimer) {
+      clearTimeout(this.rotationTimer);
+    }
+  }
+
+  handlePan(event) {
+    if (!this.enablePan) return;
+
+    // Calculate new position
+    this.posX = this.lastPosX + event.deltaX;
+    this.posY = this.lastPosY + event.deltaY;
+
+    // Apply boundaries when not zoomed
+    if (this.scale <= 1.0) {
+      this.posX = 0;
+      this.posY = 0;
+    }
+
+    this.applyTransform();
+    this.onPanUpdate(this.posX, this.posY);
+  }
+
+  handlePanEnd(event) {
+    this.lastPosX = this.posX;
+    this.lastPosY = this.posY;
+  }
+
+  handleTap(event) {
+    const rect = this.container.getBoundingClientRect();
+    const x = event.center.x - rect.left;
+    const y = event.center.y - rect.top;
+    this.onTap(x, y);
+  }
+
+  handleDoubleTap(event) {
+    // Toggle between min and max scale
+    const targetScale = this.scale > 1.0 ? 1.0 : 2.0;
+    this.setScale(targetScale);
+    this.onDoubleTap(event.center.x, event.center.y);
+  }
+
+  applyTransform() {
+    if (!this.imageElement) return;
+
+    const transform = `translate(${this.posX}px, ${this.posY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
+    this.imageElement.style.transform = transform;
+    this.imageElement.style.webkitTransform = transform;
+  }
+
+  // Public API methods
+  setScale(scale, animated = true) {
+    this.scale = Math.max(this.minScale, Math.min(this.maxScale, scale));
+    this.lastScale = this.scale;
+
+    if (animated) {
+      this.imageElement.style.transition = 'transform 0.3s ease-out';
+      setTimeout(() => {
+        this.imageElement.style.transition = '';
+      }, 300);
+    }
+
+    this.applyTransform();
+    this.onScaleUpdate(this.scale);
+  }
+
+  setPosition(x, y, animated = true) {
+    this.posX = x;
+    this.posY = y;
+    this.lastPosX = x;
+    this.lastPosY = y;
+
+    if (animated) {
+      this.imageElement.style.transition = 'transform 0.3s ease-out';
+      setTimeout(() => {
+        this.imageElement.style.transition = '';
+      }, 300);
+    }
+
+    this.applyTransform();
+    this.onPanUpdate(this.posX, this.posY);
+  }
+
+  setRotation(rotation, animated = true) {
+    this.rotation = rotation;
+    this.lastRotation = rotation;
+
+    if (animated) {
+      this.imageElement.style.transition = 'transform 0.3s ease-out';
+      setTimeout(() => {
+        this.imageElement.style.transition = '';
+      }, 300);
+    }
+
+    this.applyTransform();
+    this.onRotateUpdate(this.rotation);
+  }
+
+  reset(animated = true) {
+    this.setScale(this.options.initialScale || 1.0, animated);
+    this.setPosition(0, 0, animated);
+    this.setRotation(0, animated);
+  }
+
+  updateImage(imageUrl) {
+    this.imageUrl = imageUrl;
+    if (this.imageElement) {
+      this.imageElement.src = imageUrl;
+    }
+  }
+
+  dispose() {
+    if (this.hammer) {
+      this.hammer.destroy();
+      this.hammer = null;
+    }
+    if (this.zoomResetTimeout) {
+      clearTimeout(this.zoomResetTimeout);
+    }
+    if (this.rotationTimer) {
+      clearTimeout(this.rotationTimer);
+    }
+    if (this.container && this.imageElement) {
+      this.container.removeChild(this.imageElement);
+    }
+    this.imageElement = null;
+  }
+}
 
 // Global registry for handlers and elements
 window.photoViewHandlers = window.photoViewHandlers || {};
@@ -374,25 +414,25 @@ window.photoViewElements = window.photoViewElements || {};
 
 // Register element from Dart
 window.registerPhotoViewElement = function (containerId, element) {
-    window.photoViewElements[containerId] = element;
-  };
+  window.photoViewElements[containerId] = element;
+};
 
 // Factory function called from Dart
 window.createPhotoViewHandler = function (containerId, imageUrl, options) {
-    const handler = new PhotoViewHandler(containerId, imageUrl, options);
-    window.photoViewHandlers[containerId] = handler;
-    return handler;
-  };
+  const handler = new PhotoViewHandler(containerId, imageUrl, options);
+  window.photoViewHandlers[containerId] = handler;
+  return handler;
+};
 
 window.getPhotoViewHandler = function (containerId) {
-    return window.photoViewHandlers[containerId];
-  };
+  return window.photoViewHandlers[containerId];
+};
 
 window.disposePhotoViewHandler = function (containerId) {
-    const handler = window.photoViewHandlers[containerId];
-    if (handler) {
-      handler.dispose();
-      delete window.photoViewHandlers[containerId];
-    }
-    delete window.photoViewElements[containerId];
-  };
+  const handler = window.photoViewHandlers[containerId];
+  if (handler) {
+    handler.dispose();
+    delete window.photoViewHandlers[containerId];
+  }
+  delete window.photoViewElements[containerId];
+};
